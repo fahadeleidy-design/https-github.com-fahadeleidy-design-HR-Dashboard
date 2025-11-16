@@ -17,62 +17,90 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
 
-  const handleSetLoading = (isLoading: boolean, message: string = '') => {
+  const handleSetLoading = useCallback((isLoading: boolean, message: string = '') => {
       setLoading(isLoading);
       setLoadingMessage(message);
-  }
+  }, []);
 
   const handleDataLoaded = useCallback((data: any[]) => {
-    try {
-      const mappedData: Employee[] = data.map(row => {
-        const parseDate = (date: string | Date | null): Date | null => {
-            if (!date) return null;
-            const d = new Date(date);
-            return isNaN(d.getTime()) ? null : d;
-        };
+    const mappedData: Employee[] = [];
+    const skippedRows: { index: number, error: string }[] = [];
 
-        const parseSalary = (salary: any): number => {
-            if (salary === null || salary === undefined) return 0;
-            if (typeof salary === 'number') return salary;
-            // Remove currency symbols, commas, and other non-numeric characters, then parse.
-            const cleanSalary = String(salary).replace(/[^0-9.-]+/g,"");
-            const num = parseFloat(cleanSalary);
-            return isNaN(num) ? 0 : num;
-        };
-          
-        return {
-          employeeId: String(row['Employee ID'] ?? ''),
-          employeeNameArabic: String(row['Employee Name (Arabic)'] ?? ''),
-          employeeNameEnglish: String(row['Employee Name (English)'] ?? ''),
-          nationality: String(row.Nationality ?? ''),
-          department: String(row.Department ?? ''),
-          jobTitle: String(row['Position/Job Title'] ?? ''),
-          status: String(row.Status ?? 'Unknown'),
-          dateOfJoining: parseDate(row['Date of Joining']),
-          iqamaNumber: String(row['IQAMA Number'] ?? ''),
-          iqamaIssueDate: parseDate(row['IQAMA Issue Date']),
-          iqamaExpiryDate: parseDate(row['IQAMA Expiry Date']),
-          passportNumber: String(row['Passport Number'] ?? ''),
-          passportIssueDate: parseDate(row['Passport Issue Date']),
-          passportExpiryDate: parseDate(row['Passport Expiry Date']),
-          contractType: String(row['Contract Type'] ?? 'Unknown'),
-          contractStartDate: parseDate(row['Contract Start Date']),
-          contractEndDate: parseDate(row['Contract End Date']),
-          email: String(row['Email Address'] ?? ''),
-          mobileNumber: String(row['Mobile Number'] ?? ''),
-          sponsorName: String(row['Sponsor Name'] ?? ''),
-          basicSalary: parseSalary(row['Basic Salary']),
+    data.forEach((row, index) => {
+        try {
+            const parseDate = (date: string | Date | null): Date | null => {
+                if (!date) return null;
+                const d = new Date(date);
+                return isNaN(d.getTime()) ? null : d;
+            };
+
+            const parseSalary = (salary: any): number => {
+                if (salary === null || salary === undefined) return 0;
+                if (typeof salary === 'number') return salary;
+                // Remove currency symbols, commas, and other non-numeric characters, then parse.
+                const cleanSalary = String(salary).replace(/[^0-9.-]+/g,"");
+                const num = parseFloat(cleanSalary);
+                return isNaN(num) ? 0 : num;
+            };
+            
+            const parseString = (value: any): string => {
+                const str = String(value ?? '').trim();
+                return str === '' ? 'N/A' : str;
+            };
+
+            const nationality = String(row.Nationality ?? '').trim();
+            const isSaudi = nationality.toLowerCase().includes('saudi');
+
+            const employee: Employee = {
+              employeeId: String(row['Employee ID'] ?? ''),
+              employeeNameArabic: parseString(row['Employee Name (Arabic)']),
+              employeeNameEnglish: String(row['Employee Name (English)'] ?? ''),
+              nationality: nationality || 'N/A',
+              department: parseString(row.Department),
+              jobTitle: parseString(row['Position/Job Title']),
+              status: parseString(row.Status),
+              dateOfJoining: parseDate(row['Date of Joining']),
+              
+              // Saudi-specific logic for Iqama
+              iqamaNumber: isSaudi ? 'N/A' : parseString(row['IQAMA Number']),
+              iqamaIssueDate: isSaudi ? null : parseDate(row['IQAMA Issue Date']),
+              iqamaExpiryDate: isSaudi ? null : parseDate(row['IQAMA Expiry Date']),
+              
+              passportNumber: parseString(row['Passport Number']),
+              passportIssueDate: parseDate(row['Passport Issue Date']),
+              passportExpiryDate: parseDate(row['Passport Expiry Date']),
+              contractType: parseString(row['Contract Type']),
+              contractStartDate: parseDate(row['Contract Start Date']),
+              contractEndDate: parseDate(row['Contract End Date']),
+              email: parseString(row['Email Address']),
+              mobileNumber: parseString(row['Mobile Number']),
+              sponsorName: parseString(row['Sponsor Name']),
+              basicSalary: parseSalary(row['Basic Salary']),
+            };
+            
+            // Validate essential fields for each row
+            if (!employee.employeeId || !employee.employeeNameEnglish) {
+              throw new Error('Missing essential fields: Employee ID or Name.');
+            }
+            
+            mappedData.push(employee);
+
+        } catch (e: any) {
+            // Excel row numbers are 1-based, plus a header row, so add 2.
+            skippedRows.push({ index: index + 2, error: e.message });
         }
-      });
-       // Basic validation after mapping
-      if (mappedData.length > 0 && (!mappedData[0].employeeId || !mappedData[0].employeeNameEnglish)) {
-        throw new Error(`The data is missing essential fields like Employee ID or Name. Please check the file quality.`);
-      }
-      setEmployees(mappedData);
-      setError(null); // Clear previous errors on successful load
-    } catch (e: any) {
-      setError(e.message || 'Failed to process data. Ensure columns match the required format and dates are valid.');
-      setEmployees([]);
+    });
+
+    if (mappedData.length === 0 && data.length > 0) {
+        setError('Could not read any valid employee records from the file. Please check the column headers and data format.');
+        setEmployees([]);
+    } else {
+        setEmployees(mappedData);
+        if (skippedRows.length > 0) {
+            setError(`Warning: Successfully loaded ${mappedData.length} records, but skipped ${skippedRows.length} rows due to formatting errors.`);
+        } else {
+            setError(null); // Clear previous errors
+        }
     }
   }, []);
 
@@ -145,7 +173,7 @@ const App: React.FC = () => {
         <h3 className="font-semibold text-slate-700">How it works:</h3>
         <ol className="list-decimal list-inside mt-2 space-y-1 text-sm text-slate-600">
             <li>Prepare your employee data in an Excel file (.xlsx).</li>
-            <li>Ensure your file has the required columns shown in the upload panel (including Basic Salary).</li>
+            <li>Ensure your file has the required columns shown in the upload panel.</li>
             <li>Click "Select Excel File" and choose your file.</li>
             <li>The dashboard and other modules will automatically update with your data.</li>
         </ol>

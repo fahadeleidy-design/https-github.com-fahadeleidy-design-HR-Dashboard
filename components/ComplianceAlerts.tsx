@@ -1,4 +1,3 @@
-
 import React, { useMemo } from 'react';
 import { Employee } from '../types';
 
@@ -15,7 +14,9 @@ const daysUntil = (date: Date | null): number => {
     if (!date) return Infinity;
     const today = new Date();
     today.setHours(0, 0, 0, 0); // Normalize today's date
-    const diffTime = date.getTime() - today.getTime();
+    const targetDate = new Date(date);
+    targetDate.setHours(0, 0, 0, 0);
+    const diffTime = targetDate.getTime() - today.getTime();
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 };
 
@@ -31,7 +32,8 @@ export const ComplianceAlerts: React.FC<ComplianceAlertsProps> = ({ employees })
     const expiringContracts = employees
       .filter(e => {
         const days = daysUntil(e.contractEndDate);
-        return String(e.contractType).toLowerCase().includes('definite') && days >= 0 && days <= 90;
+        // Corrected logic: Track any contract that is NOT indefinite.
+        return !String(e.contractType).toLowerCase().includes('indefinite') && days >= 0 && days <= 90;
       })
       .sort((a, b) => daysUntil(a.contractEndDate) - daysUntil(b.contractEndDate));
 

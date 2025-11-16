@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo } from 'react';
 import { Employee } from '../types';
 
@@ -25,8 +24,8 @@ const formatDate = (date: Date | null) => {
 };
 
 const getDateUrgencyClass = (date: Date | null, options?: { contractType?: string }): string => {
-    // If contractType is provided, only apply highlighting for 'definite' contracts.
-    if (options?.contractType && !String(options.contractType).toLowerCase().includes('definite')) {
+    // If contractType is provided, only apply highlighting for non-indefinite contracts.
+    if (options?.contractType && String(options.contractType).toLowerCase().includes('indefinite')) {
         return '';
     }
     const days = daysUntil(date);
@@ -211,7 +210,7 @@ export const EmployeeTable: React.FC<EmployeeTableProps> = ({ employees }) => {
                   </span>
                 </td>
                 <td className="px-6 py-4">
-                  <span className={`px-2 py-1 text-xs font-medium rounded-full whitespace-nowrap ${String(emp.contractType).toLowerCase().includes('definite') ? 'bg-blue-100 text-blue-800' : 'bg-indigo-100 text-indigo-800'}`}>
+                  <span className={`px-2 py-1 text-xs font-medium rounded-full whitespace-nowrap ${!String(emp.contractType).toLowerCase().includes('indefinite') ? 'bg-blue-100 text-blue-800' : 'bg-indigo-100 text-indigo-800'}`}>
                     {emp.contractType}
                   </span>
                 </td>
@@ -225,7 +224,7 @@ export const EmployeeTable: React.FC<EmployeeTableProps> = ({ employees }) => {
                 </td>
                  <td className={`px-6 py-4 ${getDateUrgencyClass(emp.contractEndDate, { contractType: emp.contractType })}`}>
                     {formatDate(emp.contractEndDate)}
-                    {String(emp.contractType).toLowerCase().includes('definite') && daysUntil(emp.contractEndDate) < 0 && ' (Expired)'}
+                    {!String(emp.contractType).toLowerCase().includes('indefinite') && daysUntil(emp.contractEndDate) < 0 && ' (Expired)'}
                 </td>
               </tr>
             ))}
