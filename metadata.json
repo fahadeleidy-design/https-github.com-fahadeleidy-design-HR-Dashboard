@@ -1,0 +1,5 @@
+{
+  "name": "Saudi HR Compliance Dashboard",
+  "description": "A comprehensive dashboard for HR that complies with Saudi laws and regulations. It visualizes key HR metrics and compliance data loaded from an Excel file.",
+  "requestFramePermissions": []
+}
