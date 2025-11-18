@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Employee, CorrectionReport, RuleDefinition, Tab, SkippedRow, LoanInfo } from './types';
+import { Employee, CorrectionReport, RuleDefinition, Tab, SkippedRow, LoanInfo, NitaqatInfo, Vehicle, GovernmentalDocument } from './types';
 import { FileUpload } from './components/FileUpload';
 import { StatCard } from './components/StatCard';
 import { ComplianceAlerts } from './components/ComplianceAlerts';
@@ -8,20 +8,38 @@ import { EmployeeTable } from './components/EmployeeTable';
 import { LeaveManagement } from './components/LeaveManagement';
 import { EOSBCalculator } from './components/EOSBCalculator';
 import { Sidebar } from './components/Sidebar';
-import { correctDataWithAI, localStandardizeData } from './lib/ai';
 import { CorrectionReportModal } from './components/CorrectionReportModal';
 import { AskAI } from './components/AskAI';
 import { Payroll } from './components/Payroll';
 import { SaudizationDashboard } from './components/SaudizationDashboard';
 import { StatutoryReports } from './components/StatutoryReports';
 import { PersonalLoans } from './components/PersonalLoans';
+import { VehicleManagement } from './components/VehicleManagement';
+import { GovDocsManagement } from './components/GovDocsManagement';
 import { loadRules, calculateNitaqatStatus } from './lib/rulesEngine';
-import { DEFAULT_USE_AI, DISABLE_AI_OVERRIDE, AI_PROXY_ENDPOINT, AI_TIMEOUT_MS, AI_RETRIES, AI_SAMPLE_LIMIT } from './config/aiConfig';
+import { localStandardizeData } from './lib/ai';
+import { usePersistentEmployees } from './hooks/usePersistentEmployees';
+import { usePersistentVehicles } from './hooks/usePersistentVehicles';
+import { usePersistentGovDocs } from './hooks/usePersistentGovDocs';
+
+const daysUntil = (date: Date | null): number => {
+    if (!date) return Infinity;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const targetDate = new Date(date);
+    targetDate.setHours(0, 0, 0, 0);
+    const diffTime = targetDate.getTime() - today.getTime();
+    return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+};
 
 export const App: React.FC = () => {
-  const [employees, setEmployees] = useState<Employee[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
+  const { employees, addEmployee, updateEmployee, deleteEmployee, setAllEmployees, loading: employeesLoading } = usePersistentEmployees();
+  const { vehicles, addVehicle, updateVehicle, deleteVehicle, loading: vehiclesLoading } = usePersistentVehicles();
+  const { govDocs, addGovDoc, updateGovDoc, deleteGovDoc, loading: govDocsLoading } = usePersistentGovDocs();
+  
+  const [isProcessingFile, setIsProcessingFile] = useState<boolean>(false);
   const [loadingMessage, setLoadingMessage] = useState<string>('');
+  
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [selectedSponsor, setSelectedSponsor] = useState<string>('');
@@ -29,9 +47,18 @@ export const App: React.FC = () => {
   const [rules, setRules] = useState<RuleDefinition[]>([]);
   const [lang, setLang] = useState<'en' | 'ar'>('en');
   const [direction, setDirection] = useState<'ltr' | 'rtl'>('ltr');
-  const [useAIForCorrection, setUseAIForCorrection] = useState<boolean>(DEFAULT_USE_AI);
   const [initialTableFilter, setInitialTableFilter] = useState<any>(null);
 
+  const isLoading = employeesLoading || vehiclesLoading || isProcessingFile || govDocsLoading;
+
+  useEffect(() => {
+    if (employeesLoading || vehiclesLoading || govDocsLoading) {
+        setLoadingMessage('Loading data from browser...');
+    } else if (!isProcessingFile) {
+        setLoadingMessage('');
+    }
+  }, [employeesLoading, vehiclesLoading, govDocsLoading, isProcessingFile]);
+  
   useEffect(() => {
     document.documentElement.lang = lang;
     document.documentElement.dir = direction;
@@ -50,9 +77,9 @@ export const App: React.FC = () => {
     setLang(selectedLang);
     setDirection(selectedLang === 'ar' ? 'rtl' : 'ltr');
   };
-
-  const handleSetLoading = useCallback((isLoading: boolean, message: string = '') => {
-    setLoading(isLoading);
+  
+  const handleFileProcessingState = useCallback((isProcessing: boolean, message: string = '') => {
+    setIsProcessingFile(isProcessing);
     setLoadingMessage(message);
   }, []);
 
@@ -92,12 +119,12 @@ export const App: React.FC = () => {
         const isSaudi = nationality.toLowerCase().includes('saudi') || nationality.includes('سعودي') || nationality.includes('سعودية');
         
         const dateOfJoining = parseDate(getFieldValue(row, 'Date of Joining', 'GOSI_Join_Date'));
-        const tenure = dateOfJoining ? (new Date().getTime() - dateOfJoining.getTime()) / (1000 * 3600 * 24 * 365.25) : 0;
+        const tenure = dateOfJoining ? (new Date().getTime() - dateOfJoining.getTime()) / (1000 * 60 * 60 * 24 * 365.25) : 0;
 
         const loanInfo: LoanInfo = {
             totalAmount: parseFloat(getFieldValue(row, 'Total Loan Amount')) || undefined,
             startDate: parseDate(getFieldValue(row, 'Loan Start Date')),
-            installments: 4, // Default as per policy
+            installments: 4,
         };
 
         const employee: Employee = {
@@ -146,6 +173,9 @@ export const App: React.FC = () => {
           iban: getFieldValue(row, 'IBAN', 'Bank IBAN'),
           bankName: getFieldValue(row, 'Bank Name'),
           specialCategory: getFieldValue(row, 'Special Category', 'Employment Type'),
+          isDriver: getFieldValue(row, 'Is Driver').toLowerCase() === 'yes',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
         };
         mappedData.push(employee);
       } catch (e: any) {
@@ -160,53 +190,34 @@ export const App: React.FC = () => {
       setError("Uploaded file is empty.");
       return;
     }
-    handleSetLoading(true, `Processing ${rawData.length} rows...`);
+    
+    handleFileProcessingState(true, `Processing ${rawData.length} rows...`);
     setError(null);
     setCorrectionReport(null);
 
-    let dataToProcess = rawData;
-    let aiProcessingAttempted = false;
+    await new Promise(resolve => setTimeout(resolve, 0));
 
     try {
-      if (useAIForCorrection && !DISABLE_AI_OVERRIDE && AI_PROXY_ENDPOINT) {
-        aiProcessingAttempted = true;
-        handleSetLoading(true, 'Sending data to AI for correction...');
-        dataToProcess = await correctDataWithAI(rawData, {
-          useAI: true,
-          timeoutMs: AI_TIMEOUT_MS,
-          retries: AI_RETRIES,
-          sampleLimit: AI_SAMPLE_LIMIT,
-          serverEndpoint: AI_PROXY_ENDPOINT,
-          disableAIOverride: DISABLE_AI_OVERRIDE,
+        let dataToProcess = localStandardizeData(rawData);
+          
+        handleFileProcessingState(true, 'Mapping processed data...');
+        const { mappedData, skippedRows } = processAndMapData(dataToProcess);
+          
+        setAllEmployees(mappedData);
+        setCorrectionReport({
+            processedCount: mappedData.length,
+            skippedCount: skippedRows.length,
+            skippedRows: skippedRows,
         });
-      } else {
-        handleSetLoading(true, 'Applying local data standardization...');
-        dataToProcess = localStandardizeData(rawData);
-      }
-      
-      handleSetLoading(true, 'Mapping processed data...');
-      const { mappedData, skippedRows } = processAndMapData(dataToProcess);
-      
-      setEmployees(mappedData);
-      setCorrectionReport({
-        processedCount: mappedData.length,
-        skippedCount: skippedRows.length,
-        skippedRows: skippedRows,
-      });
-      setError(null);
-
-    } catch (err: any) {
-        console.error("Error during data processing:", err);
-        setError(`Data Processing Failed: ${err.message}.`);
-        setEmployees([]);
+        setError(null);
+    } catch (e: any) {
+        setError("An error occurred while processing the file.");
+        console.error(e);
     } finally {
-        handleSetLoading(false);
+        handleFileProcessingState(false);
     }
-  }, [useAIForCorrection, processAndMapData, handleSetLoading]);
-  
-  const handleUpdateEmployee = (updatedEmployee: Employee) => {
-    setEmployees(prev => prev.map(emp => emp.id === updatedEmployee.id ? updatedEmployee : emp));
-  };
+
+  }, [processAndMapData, handleFileProcessingState, setAllEmployees]);
   
   const allSponsors = useMemo(() => [...new Set(employees.map(e => e.sponsorName).filter(Boolean))].sort(), [employees]);
 
@@ -214,6 +225,20 @@ export const App: React.FC = () => {
     if (!selectedSponsor) return employees;
     return employees.filter(e => e.sponsorName === selectedSponsor);
   }, [employees, selectedSponsor]);
+  
+  const drivers = useMemo(() => employees.filter(e => e.isDriver), [employees]);
+
+  const vehicleAlertCount = useMemo(() => {
+    return vehicles.filter(v => 
+        daysUntil(v.insurance.endDate) <= 30 ||
+        daysUntil(v.inspection.endDate) <= 30 ||
+        daysUntil(v.registration.endDate) <= 30
+    ).length;
+  }, [vehicles]);
+
+  const govDocAlertCount = useMemo(() => {
+    return govDocs.filter(d => daysUntil(d.expiryDate) <= 30).length;
+  }, [govDocs]);
   
   const handleCardClick = (filterType: string) => {
     setInitialTableFilter({ type: filterType });
@@ -234,9 +259,9 @@ export const App: React.FC = () => {
     const days60 = new Date(); days60.setDate(now.getDate() + 60);
     const days70 = new Date(); days70.setDate(now.getDate() + 70);
 
-    const iqamaThisMonth = filteredEmployees.filter(e => e.visa.iqamaExpiryDate && e.visa.iqamaExpiryDate >= thisMonthStart && e.visa.iqamaExpiryDate <= thisMonthEnd).length;
-    const iqamaNextMonth = filteredEmployees.filter(e => e.visa.iqamaExpiryDate && e.visa.iqamaExpiryDate >= nextMonthStart && e.visa.iqamaExpiryDate <= nextMonthEnd).length;
-    const contracts60_70 = filteredEmployees.filter(e => e.contract.endDate && e.contract.endDate >= days60 && e.contract.endDate <= days70).length;
+    const iqamaThisMonth = filteredEmployees.filter(e => e.visa.iqamaExpiryDate && new Date(e.visa.iqamaExpiryDate) >= thisMonthStart && new Date(e.visa.iqamaExpiryDate) <= thisMonthEnd).length;
+    const iqamaNextMonth = filteredEmployees.filter(e => e.visa.iqamaExpiryDate && new Date(e.visa.iqamaExpiryDate) >= nextMonthStart && new Date(e.visa.iqamaExpiryDate) <= nextMonthEnd).length;
+    const contracts60_70 = filteredEmployees.filter(e => e.contract.endDate && new Date(e.contract.endDate) >= days60 && new Date(e.contract.endDate) <= days70).length;
 
     return {
       totalEmployees: total,
@@ -252,11 +277,11 @@ export const App: React.FC = () => {
   const nitaqatRule = useMemo(() => rules.find(r => r.type === 'NITAQAT'), [rules]);
 
   const renderContent = () => {
-    if (employees.length === 0 && !loading && !error) {
+    if (employees.length === 0 && !isLoading && !error) {
       return (
         <div className="text-center p-10 bg-white dark:bg-slate-800 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
-          <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Welcome to the HR & Admin Module</h2>
-          <p className="mt-2 text-slate-500 dark:text-slate-400">To get started, please upload your employee data file.</p>
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Welcome to the HR Data Management System</h2>
+          <p className="mt-2 text-slate-500 dark:text-slate-400">To get started, please upload your initial employee data file.</p>
         </div>
       );
     }
@@ -273,7 +298,7 @@ export const App: React.FC = () => {
               <StatCard title="Iqama Expiring Next Month" value={dashboardStats.iqamaNextMonth} color="text-orange-600 bg-orange-100 dark:bg-orange-900/50" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" /></svg>} onClick={() => handleCardClick('IQAMA_EXPIRY_NEXT_MONTH')} />
               <StatCard title="Contracts Expiring in 60-70 Days" value={dashboardStats.contracts60_70} colSpan={2} color="text-cyan-600 bg-cyan-100 dark:bg-cyan-900/50" icon={<svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>} onClick={() => handleCardClick('CONTRACT_EXPIRY_60_70_DAYS')} />
             </div>
-            <ComplianceAlerts employees={filteredEmployees} />
+            <ComplianceAlerts employees={filteredEmployees} vehicles={vehicles} govDocs={govDocs} />
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <NationalityChart data={Object.entries(filteredEmployees.reduce<Record<string, number>>((acc, e) => ({ ...acc, [e.nationality]: (acc[e.nationality] || 0) + 1 }), {})).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value)} />
               <DepartmentChart data={Object.entries(filteredEmployees.reduce<Record<string, number>>((acc, e) => ({ ...acc, [e.department]: (acc[e.department] || 0) + 1 }), {})).map(([name, value]) => ({ name, value })).sort((a,b) => b.value - a.value)} />
@@ -287,10 +312,12 @@ export const App: React.FC = () => {
             </div>
           </div>
         );
-      case 'directory': return <EmployeeTable employees={employees} onUpdateEmployee={handleUpdateEmployee} initialFilter={initialTableFilter} onFilterApplied={() => setInitialTableFilter(null)} />;
-      case 'saudization': return nitaqatRule && <SaudizationDashboard employees={filteredEmployees} nitaqatRule={nitaqatRule} calculationFn={calculateNitaqatStatus} lang={lang} />;
+      case 'directory': return <EmployeeTable employees={employees} onUpdateEmployee={updateEmployee} onAddEmployee={addEmployee} onDeleteEmployee={deleteEmployee} initialFilter={initialTableFilter} onFilterApplied={() => setInitialTableFilter(null)} />;
+      case 'saudization': return nitaqatRule && <SaudizationDashboard employees={filteredEmployees} nitaqatRule={nitaqatRule} calculationFn={calculateNitaqatStatus as (employees: (Employee | Partial<Employee>)[], rule: RuleDefinition, sector: string, lang: 'en' | 'ar') => NitaqatInfo} lang={lang} />;
       case 'payroll': return <Payroll employees={filteredEmployees} />;
-      case 'loans': return <PersonalLoans employees={filteredEmployees} onUpdateEmployee={handleUpdateEmployee} />;
+      case 'loans': return <PersonalLoans employees={filteredEmployees} onUpdateEmployee={updateEmployee} />;
+      case 'vehicles': return <VehicleManagement vehicles={vehicles} drivers={drivers} onAddVehicle={addVehicle} onUpdateVehicle={updateVehicle} onDeleteVehicle={deleteVehicle} />;
+      case 'gov-docs': return <GovDocsManagement govDocs={govDocs} onAddGovDoc={addGovDoc} onUpdateGovDoc={updateGovDoc} onDeleteGovDoc={deleteGovDoc} />;
       case 'eosb': return <EOSBCalculator employees={filteredEmployees} />;
       case 'leave': return <LeaveManagement employees={filteredEmployees} />;
       case 'reports': return <StatutoryReports employees={filteredEmployees} />;
@@ -301,11 +328,11 @@ export const App: React.FC = () => {
 
   return (
     <div className="min-h-screen text-slate-800 dark:text-slate-200 flex bg-slate-100 dark:bg-slate-900">
-      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onLanguageChange={handleLanguageChange} lang={lang} />
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} onLanguageChange={handleLanguageChange} lang={lang} vehicleAlertCount={vehicleAlertCount} govDocAlertCount={govDocAlertCount} />
       <main className="flex-1 p-4 md:p-8 space-y-6 overflow-y-auto">
         <header className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4">
           <div className="flex-1">
-            <h1 className="text-3xl font-bold text-slate-900 dark:text-white">HR & Admin Dashboard</h1>
+            <h1 className="text-3xl font-bold text-slate-900 dark:text-white">HR Data Management</h1>
             <p className="text-slate-500 dark:text-slate-400 mt-1">Special Offices Company</p>
           </div>
           <div className="flex items-center gap-4">
@@ -313,17 +340,12 @@ export const App: React.FC = () => {
                 <option value="">All Sponsors</option>
                 {allSponsors.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
-            <label htmlFor="ai-toggle" className="relative inline-flex items-center cursor-pointer">
-              <input type="checkbox" id="ai-toggle" className="sr-only peer" checked={useAIForCorrection && !DISABLE_AI_OVERRIDE && !!AI_PROXY_ENDPOINT} onChange={() => setUseAIForCorrection(!useAIForCorrection)} disabled={DISABLE_AI_OVERRIDE || !AI_PROXY_ENDPOINT} />
-              <div className="w-11 h-6 bg-slate-200 rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-white after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
-              <span className="ml-3 text-sm font-medium text-slate-600 dark:text-slate-300">Use AI Correction</span>
-            </label>
           </div>
         </header>
-        <FileUpload onDataLoaded={handleDataLoaded} setLoading={handleSetLoading} setError={setError} />
-        {loading && <div className="text-center p-4 font-semibold text-primary-600 dark:text-primary-400">{loadingMessage || 'Loading...'}</div>}
+        <FileUpload onDataLoaded={handleDataLoaded} setLoading={handleFileProcessingState} setError={setError} />
+        {isLoading && <div className="text-center p-4 font-semibold text-primary-600 dark:text-primary-400">{loadingMessage || 'Loading...'}</div>}
         {error && <div className="bg-red-100 dark:bg-red-900/30 border border-red-400 text-red-700 dark:text-red-300 px-4 py-3 rounded-lg" role="alert"><strong className="font-bold">Error: </strong>{error}</div>}
-        {employees.length > 0 && renderContent()}
+        {renderContent()}
         {correctionReport && <CorrectionReportModal report={correctionReport} onClose={() => setCorrectionReport(null)} />}
       </main>
     </div>

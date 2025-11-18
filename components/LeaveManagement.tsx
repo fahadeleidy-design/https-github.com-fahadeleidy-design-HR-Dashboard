@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Employee, RuleDefinition } from '../types';
 import { loadRules } from '../lib/rulesEngine';
 
@@ -17,6 +17,7 @@ const calculateYearsOfService = (joiningDate: Date | null): number => {
 export const LeaveManagement: React.FC<{ employees: Employee[] }> = ({ employees }) => {
     const [leaveBalances, setLeaveBalances] = useState<Record<string, number>>({});
     const [leaveRule, setLeaveRule] = useState<RuleDefinition | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
 
     useEffect(() => {
         const rules = loadRules();
@@ -67,6 +68,16 @@ export const LeaveManagement: React.FC<{ employees: Employee[] }> = ({ employees
     const handleResetAll = () => {
         setLeaveBalances(getInitialBalances());
     };
+    
+    const filteredEmployees = useMemo(() => {
+        if (!searchTerm) return employees;
+        const lowercasedFilter = searchTerm.toLowerCase();
+        return employees.filter(emp =>
+          emp.employeeNameEnglish.toLowerCase().includes(lowercasedFilter) ||
+          emp.employeeId.toLowerCase().includes(lowercasedFilter)
+        );
+    }, [employees, searchTerm]);
+
 
     if (!leaveRule) {
         return (
@@ -87,6 +98,22 @@ export const LeaveManagement: React.FC<{ employees: Employee[] }> = ({ employees
                     Reset All Balances
                 </button>
             </div>
+
+            <div className="relative mb-4">
+                <input
+                    type="text"
+                    placeholder="Search by name or ID..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full p-2 pl-10 border bg-transparent border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-primary-500 transition"
+                />
+                <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                </div>
+            </div>
+
             <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left text-slate-500 dark:text-slate-400">
                     <thead className="text-xs text-slate-700 dark:text-slate-300 uppercase bg-slate-100 dark:bg-slate-700">
@@ -98,7 +125,7 @@ export const LeaveManagement: React.FC<{ employees: Employee[] }> = ({ employees
                         </tr>
                     </thead>
                     <tbody>
-                        {employees.map((emp) => {
+                        {filteredEmployees.map((emp) => {
                             const yearsOfService = calculateYearsOfService(emp.dateOfJoining);
                             const entitlement = getLeaveEntitlement(yearsOfService);
                             const currentBalance = leaveBalances[emp.employeeId] ?? entitlement;
@@ -114,17 +141,17 @@ export const LeaveManagement: React.FC<{ employees: Employee[] }> = ({ employees
                                             type="number"
                                             value={currentBalance}
                                             onChange={(e) => handleBalanceChange(emp.employeeId, e.target.value)}
-                                            className="w-20 p-1 text-center font-bold text-blue-600 dark:text-blue-400 bg-transparent border border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-blue-500"
+                                            className="w-20 p-1 text-center font-bold text-primary-600 dark:text-primary-400 bg-transparent border border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-primary-500"
                                             aria-label={`Leave balance for ${emp.employeeNameEnglish}`}
                                         />
                                     </td>
                                 </tr>
                             );
                         })}
-                        {employees.length === 0 && (
+                        {filteredEmployees.length === 0 && (
                             <tr>
                                 <td colSpan={4} className="text-center py-10 text-slate-500 dark:text-slate-400">
-                                    No employee data to display.
+                                    No employees found.
                                 </td>
                             </tr>
                         )}

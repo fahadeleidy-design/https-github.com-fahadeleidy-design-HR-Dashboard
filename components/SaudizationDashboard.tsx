@@ -2,12 +2,13 @@ import React, { useState, useMemo } from 'react';
 import { Employee, RuleDefinition, NitaqatInfo } from '../types';
 import { NitaqatStatusCard } from './NitaqatStatusCard';
 import { SaudizationSimulator } from './SaudizationSimulator';
+import { t } from '../lib/localization';
 
 interface SaudizationDashboardProps {
   employees: Employee[];
   nitaqatRule: RuleDefinition;
-  // Fix: Add `lang` to calculationFn signature
-  calculationFn: (saudiCount: number, totalCount: number, sector: string, rule: RuleDefinition, lang: 'en' | 'ar') => NitaqatInfo;
+  // FIX: Update the calculationFn signature to accept an array of full or partial employees.
+  calculationFn: (employees: (Employee | Partial<Employee>)[], rule: RuleDefinition, sector: string, lang: 'en' | 'ar') => NitaqatInfo;
   lang: 'en' | 'ar';
 }
 
@@ -16,10 +17,7 @@ export const SaudizationDashboard: React.FC<SaudizationDashboardProps> = ({ empl
   const sectorOptions = useMemo(() => Object.keys(nitaqatRule.parameters.sectorAdjustments), [nitaqatRule]);
 
   const nitaqatInfo = useMemo(() => {
-    const saudiCount = employees.filter(e => e.isSaudi).length;
-    const totalCount = employees.length;
-    // Fix: Pass `lang` to calculation function
-    return calculationFn(saudiCount, totalCount, sector, nitaqatRule, lang);
+    return calculationFn(employees, nitaqatRule, sector, lang);
   }, [employees, nitaqatRule, calculationFn, sector, lang]);
 
   if (employees.length === 0) {
@@ -34,18 +32,19 @@ export const SaudizationDashboard: React.FC<SaudizationDashboardProps> = ({ empl
   return (
     <div className="space-y-6">
         <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700 flex items-center gap-4">
-            <label htmlFor="sector-select" className="text-sm font-medium text-slate-700 dark:text-slate-300 flex-shrink-0">Select Industry Sector:</label>
+            <label htmlFor="sector-select" className="text-sm font-medium text-slate-700 dark:text-slate-300 flex-shrink-0">{t('selectIndustrySector', lang)}</label>
             <select
             id="sector-select"
             value={sector}
             onChange={(e) => setSector(e.target.value)}
-            className="p-2 border bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-blue-500 transition w-full sm:w-auto text-sm"
+            className="p-2 border bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-primary-500 transition w-full sm:w-auto text-sm"
             >
             {sectorOptions.map(s => <option key={s} value={s} className="capitalize">{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
             </select>
         </div>
         <NitaqatStatusCard
             nitaqatInfo={nitaqatInfo}
+            lang={lang}
         />
         <SaudizationSimulator
             employees={employees}

@@ -5,7 +5,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid 
 } from 'recharts';
 
-const COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#6B7280', '#F97316'];
+const COLORS = ['#F97316', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#6B7280', '#3B82F6'];
 
 const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
@@ -80,7 +80,7 @@ export const TenureChart: React.FC<{ data: ChartDataPoint[] }> = ({ data }) => {
                     <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#94A3B8' }} />
                     <YAxis allowDecimals={false} tick={{ fontSize: 12, fill: '#94A3B8' }} />
                     <Tooltip cursor={{ fill: 'rgba(100, 116, 139, 0.1)' }} content={<CustomTooltip />} />
-                    <Bar dataKey="value" fill="#10B981" barSize={40} />
+                    <Bar dataKey="value" fill={COLORS[0]} barSize={40} />
                 </BarChart>
             </ResponsiveContainer>
         </ChartWrapper>

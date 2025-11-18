@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Employee } from '../types';
+import { Employee, EmployeeDetailModalProps } from '../types';
 
 const formatDateForInput = (date: Date | null): string => {
     if (!date) return '';
@@ -11,7 +11,7 @@ const formatDate = (date: Date | null): string => {
     return new Date(date).toLocaleDateString('en-CA');
 };
 
-export const EmployeeDetailModal: React.FC<{ employee: Employee; onClose: () => void; onUpdateEmployee: (employee: Employee) => void; }> = ({ employee, onClose, onUpdateEmployee }) => {
+export const EmployeeDetailModal: React.FC<EmployeeDetailModalProps> = ({ employee, onClose, onUpdateEmployee, onDeleteEmployee }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editedEmployee, setEditedEmployee] = useState<Employee>(employee);
 
@@ -52,6 +52,13 @@ export const EmployeeDetailModal: React.FC<{ employee: Employee; onClose: () => 
     setEditedEmployee(employee);
     setIsEditing(false);
   };
+  
+  const handleDelete = () => {
+      if (window.confirm(`Are you sure you want to delete ${employee.employeeNameEnglish}? This action cannot be undone.`)) {
+          onDeleteEmployee(employee.id);
+          onClose();
+      }
+  };
 
   const DetailItem: React.FC<{ label: string; value: React.ReactNode, isRtl?: boolean }> = ({ label, value, isRtl = false }) => (
     <div className="py-2">
@@ -83,7 +90,7 @@ export const EmployeeDetailModal: React.FC<{ employee: Employee; onClose: () => 
   return (
     <div 
         className="fixed inset-0 bg-black bg-opacity-60 flex justify-center items-center z-50 p-4"
-        onClick={handleCancel}
+        onClick={onClose}
         role="dialog"
         aria-modal="true"
         aria-labelledby="employee-detail-title"
@@ -99,12 +106,13 @@ export const EmployeeDetailModal: React.FC<{ employee: Employee; onClose: () => 
           <div className="flex items-center gap-4">
              {isEditing ? (
                 <>
+                    <button onClick={handleDelete} className="text-sm font-semibold text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-300">Delete</button>
                     <button onClick={handleCancel} className="text-sm font-semibold text-slate-600 dark:text-slate-300 hover:text-slate-800 dark:hover:text-slate-100">Cancel</button>
-                    <button onClick={handleSave} className="text-sm font-semibold bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700">Save Changes</button>
+                    <button onClick={handleSave} className="text-sm font-semibold bg-primary-600 text-white px-4 py-2 rounded-md hover:bg-primary-700">Save Changes</button>
                 </>
              ) : (
                 <>
-                    <button onClick={() => setIsEditing(true)} className="text-sm font-semibold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300">Edit</button>
+                    <button onClick={() => setIsEditing(true)} className="text-sm font-semibold text-primary-600 dark:text-primary-400 hover:text-primary-800 dark:hover:text-primary-300">Edit</button>
                     <button 
                         onClick={onClose} 
                         className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"

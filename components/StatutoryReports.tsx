@@ -20,6 +20,7 @@ interface GOSIReportRecord {
 
 export const StatutoryReports: React.FC<{ employees: Employee[] }> = ({ employees }) => {
     const [gosiRule, setGosiRule] = useState<RuleDefinition | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
 
     useEffect(() => {
         const rules = loadRules();
@@ -49,14 +50,23 @@ export const StatutoryReports: React.FC<{ employees: Employee[] }> = ({ employee
             };
         });
     }, [employees, gosiRule]);
+    
+    const filteredGosiData = useMemo(() => {
+        if (!searchTerm) return gosiReportData;
+        const lowercasedFilter = searchTerm.toLowerCase();
+        return gosiReportData.filter(rec =>
+            rec.employeeName.toLowerCase().includes(lowercasedFilter) ||
+            rec.employeeId.toLowerCase().includes(lowercasedFilter)
+        );
+    }, [gosiReportData, searchTerm]);
 
     const totals = useMemo(() => {
-        return gosiReportData.reduce((acc, record) => ({
+        return filteredGosiData.reduce((acc, record) => ({
             employee: acc.employee + record.employeeContribution,
             employer: acc.employer + record.employerContribution,
             total: acc.total + record.totalContribution,
         }), { employee: 0, employer: 0, total: 0 });
-    }, [gosiReportData]);
+    }, [filteredGosiData]);
     
     const handleExportCsv = () => {
         const filename = `gosi_contribution_summary_${new Date().toISOString().split('T')[0]}.csv`;
@@ -64,7 +74,7 @@ export const StatutoryReports: React.FC<{ employees: Employee[] }> = ({ employee
         
         const csvRows = [
             headers.join(','),
-            ...gosiReportData.map(row => [
+            ...filteredGosiData.map(row => [
                 `"${row.employeeId}"`,
                 `"${row.employeeName}"`,
                 `"${row.nationality}"`,
@@ -93,7 +103,7 @@ export const StatutoryReports: React.FC<{ employees: Employee[] }> = ({ employee
         autoTable(doc, {
             startY: 30,
             head: [['ID', 'Name', 'Nationality', 'Contributory Wage', 'Employee Share', 'Employer Share', 'Total']],
-            body: gosiReportData.map(r => [
+            body: filteredGosiData.map(r => [
                 r.employeeId,
                 r.employeeName,
                 r.nationality,
@@ -134,9 +144,24 @@ export const StatutoryReports: React.FC<{ employees: Employee[] }> = ({ employee
                     <button onClick={handleExportCsv} className="flex items-center justify-center gap-2 bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-semibold py-2 px-4 rounded-md hover:bg-slate-200 dark:hover:bg-slate-600 transition-colors text-sm">
                         Export to CSV
                     </button>
-                    <button onClick={handleExportPdf} className="flex items-center justify-center gap-2 bg-blue-600 text-white font-bold py-2 px-4 rounded-md hover:bg-blue-700 transition-colors text-sm">
+                    <button onClick={handleExportPdf} className="flex items-center justify-center gap-2 bg-primary-600 text-white font-bold py-2 px-4 rounded-md hover:bg-primary-700 transition-colors text-sm">
                         Export to PDF
                     </button>
+                </div>
+            </div>
+
+            <div className="relative mb-4">
+                <input
+                    type="text"
+                    placeholder="Search by name or ID..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full p-2 pl-10 border bg-transparent border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-primary-500 transition"
+                />
+                <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
                 </div>
             </div>
             
@@ -152,7 +177,7 @@ export const StatutoryReports: React.FC<{ employees: Employee[] }> = ({ employee
                         </tr>
                     </thead>
                     <tbody>
-                        {gosiReportData.map(record => (
+                        {filteredGosiData.map(record => (
                             <tr key={record.employeeId} className="bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50">
                                 <td className="px-4 py-2">
                                     <div className="font-semibold text-slate-800 dark:text-slate-100">{record.employeeName}</div>

@@ -51,7 +51,7 @@ export const AskAI: React.FC<{ employees: Employee[] }> = ({ employees }) => {
             <div className="flex-1 overflow-y-auto pr-4 space-y-4 mb-4">
                 {messages.map((msg, index) => (
                     <div key={index} className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}>
-                        <div className={`max-w-2xl p-3 rounded-lg shadow-sm ${msg.sender === 'user' ? 'bg-blue-600 text-white' : 'bg-slate-100 dark:bg-slate-700'}`}>
+                        <div className={`max-w-2xl p-3 rounded-lg shadow-sm ${msg.sender === 'user' ? 'bg-primary-600 text-white' : 'bg-slate-100 dark:bg-slate-700'}`}>
                             <pre className="whitespace-pre-wrap font-sans text-sm">{msg.text}</pre>
                         </div>
                     </div>
@@ -76,11 +76,11 @@ export const AskAI: React.FC<{ employees: Employee[] }> = ({ employees }) => {
                     value={input}
                     onChange={(e) => setInput(e.target.value)}
                     placeholder="Ask a question about your employee data..."
-                    className="flex-1 p-2 border bg-transparent border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-blue-500 transition"
+                    className="flex-1 p-2 border bg-transparent border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-primary-500 transition"
                     disabled={isLoading}
                     aria-label="Ask the AI assistant a question"
                 />
-                <button type="submit" className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 disabled:bg-slate-400 dark:disabled:bg-slate-600 disabled:cursor-not-allowed flex items-center gap-2 transition-colors" disabled={isLoading || !input.trim()}>
+                <button type="submit" className="px-4 py-2 bg-primary-600 text-white font-semibold rounded-md hover:bg-primary-700 disabled:bg-slate-400 dark:disabled:bg-slate-600 disabled:cursor-not-allowed flex items-center gap-2 transition-colors" disabled={isLoading || !input.trim()}>
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
                         <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.428A1 1 0 009.894 15V11a1 1 0 112 0v4a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
                     </svg>

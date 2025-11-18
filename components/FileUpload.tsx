@@ -81,6 +81,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded, setLoading
             'title': 'Position/Job Title',
             'status': 'Status',
             'special category': 'Special Category', 'special needs': 'Special Category', 'employment type': 'Special Category',
+            'is driver': 'Is Driver',
             'date of joining': 'Date of Joining', 'doj': 'Date of Joining', 'join date': 'Date of Joining',
             'gosi_join_date': 'Date of Joining',
             'date of exit': 'Date of Exit', 'doe': 'Date of Exit', 'exit date': 'Date of Exit',
@@ -189,7 +190,7 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded, setLoading
   }, [onDataLoaded, setLoading, setError]);
   
   const createCsvTemplate = () => {
-    const headers = ["Employee ID", "Employee Name (English)", "Employee Name (Arabic)", "Nationality", "Special Category", "Department", "Position/Job Title", "Status", "Date of Joining", "IQAMA Number", "IQAMA Issue Date", "IQAMA Expiry Date", "Passport Number", "Passport Issue Date", "Passport Expiry Date", "Contract Type", "Contract Start Date", "Contract End Date", "Email Address", "Mobile Number", "Sponsor Name", "GOSI Number", "Basic Salary", "Housing Allowance", "Transportation Allowance", "Total Loan Amount", "Loan Start Date", "IBAN", "Bank Name"];
+    const headers = ["Employee ID", "Employee Name (English)", "Employee Name (Arabic)", "Nationality", "Special Category", "Is Driver", "Department", "Position/Job Title", "Status", "Date of Joining", "IQAMA Number", "IQAMA Issue Date", "IQAMA Expiry Date", "Passport Number", "Passport Issue Date", "Passport Expiry Date", "Contract Type", "Contract Start Date", "Contract End Date", "Email Address", "Mobile Number", "Sponsor Name", "GOSI Number", "Basic Salary", "Housing Allowance", "Transportation Allowance", "Total Loan Amount", "Loan Start Date", "IBAN", "Bank Name"];
     const csvContent = "data:text/csv;charset=utf-8,\uFEFF" + headers.join(',');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
@@ -202,10 +203,23 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onDataLoaded, setLoading
 
   return (
     <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+        <div className="bg-yellow-50 dark:bg-yellow-900/30 border-l-4 border-yellow-400 p-4 mb-4 rounded-r-lg">
+            <div className="flex">
+                <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-yellow-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.21 3.03-1.742 3.03H4.42c-1.532 0-2.492-1.696-1.742-3.03l5.58-9.92zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                    </svg>
+                </div>
+                <div className="ml-3">
+                    <p className="text-sm text-yellow-700 dark:text-yellow-200">
+                        <span className="font-bold">Important:</span> Uploading a file will <span className="font-bold">overwrite all existing data</span>, including any manual changes you have made in the app.
+                    </p>
+                </div>
+            </div>
+        </div>
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Upload Employee Data</h2>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Upload an .xlsx or .csv file to begin analysis.</p>
+          <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Upload / Overwrite Data</h2>
         </div>
         <div className="flex items-center gap-3">
             <button

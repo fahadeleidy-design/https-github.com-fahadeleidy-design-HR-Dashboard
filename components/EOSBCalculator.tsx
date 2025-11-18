@@ -6,6 +6,7 @@ export const EOSBCalculator: React.FC<{ employees: Employee[] }> = ({ employees 
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
   const [basicSalary, setBasicSalary] = useState<number | ''>('');
   const [reason, setReason] = useState<TerminationReason>('non-renewal');
+  const [terminationCompensationMonths, setTerminationCompensationMonths] = useState<number>(0);
   const [eosbRule, setEosbRule] = useState<RuleDefinition | null>(null);
   
   useEffect(() => {
@@ -32,9 +33,9 @@ export const EOSBCalculator: React.FC<{ employees: Employee[] }> = ({ employees 
       return null;
     }
 
-    return calculateEOSB(selectedEmployee, eosbRule, reason, Number(basicSalary));
+    return calculateEOSB(selectedEmployee, eosbRule, reason, Number(basicSalary), terminationCompensationMonths);
 
-  }, [selectedEmployee, basicSalary, reason, eosbRule]);
+  }, [selectedEmployee, basicSalary, reason, eosbRule, terminationCompensationMonths]);
 
   return (
     <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
@@ -47,7 +48,7 @@ export const EOSBCalculator: React.FC<{ employees: Employee[] }> = ({ employees 
                         id="employee-select"
                         value={selectedEmployeeId}
                         onChange={(e) => setSelectedEmployeeId(e.target.value)}
-                        className="block w-full p-2 border bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                        className="block w-full p-2 border bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500"
                     >
                         <option value="">-- Choose Employee --</option>
                         {employees.map(emp => (
@@ -62,7 +63,7 @@ export const EOSBCalculator: React.FC<{ employees: Employee[] }> = ({ employees 
                         id="basic-salary"
                         value={basicSalary}
                         onChange={(e) => setBasicSalary(parseFloat(e.target.value) || '')}
-                        className="block w-full p-2 border bg-transparent border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                        className="block w-full p-2 border bg-transparent border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500"
                         placeholder="Enter basic salary"
                     />
                 </div>
@@ -72,13 +73,30 @@ export const EOSBCalculator: React.FC<{ employees: Employee[] }> = ({ employees 
                         id="termination-reason"
                         value={reason}
                         onChange={(e) => setReason(e.target.value as TerminationReason)}
-                        className="block w-full p-2 border bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"
+                        className="block w-full p-2 border bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500"
                     >
                         <option value="non-renewal">Contract Completion / Non-Renewal</option>
                         <option value="termination">Contract Termination by Employer</option>
                         <option value="resignation">Resignation</option>
                     </select>
                 </div>
+                {reason === 'termination' && (
+                    <div>
+                        <label htmlFor="compensation-months" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">
+                            Additional Compensation <span className="text-xs text-slate-400" dir="rtl">( عشان خاطر احمد فراج :) )</span>
+                        </label>
+                        <select
+                            id="compensation-months"
+                            value={terminationCompensationMonths}
+                            onChange={(e) => setTerminationCompensationMonths(Number(e.target.value))}
+                            className="block w-full p-2 border bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 rounded-md shadow-sm focus:ring-primary-500 focus:border-primary-500"
+                        >
+                            <option value={0}>0 Months Salary</option>
+                            <option value={1}>1 Month Salary</option>
+                            <option value={2}>2 Months Salary</option>
+                        </select>
+                    </div>
+                )}
             </div>
 
             <div className="md:col-span-2 bg-slate-50 dark:bg-slate-800/50 p-6 rounded-lg flex flex-col justify-center">
@@ -100,8 +118,15 @@ export const EOSBCalculator: React.FC<{ employees: Employee[] }> = ({ employees 
 
                         {calculationResult.terminationCompensation && calculationResult.terminationCompensation > 0 && (
                             <div className="flex justify-between items-center">
-                                <span className="font-medium text-slate-600 dark:text-slate-300">Early Termination Compensation:</span>
+                                <span className="font-medium text-slate-600 dark:text-slate-300">Additional Compensation:</span>
                                 <span className="font-bold text-slate-800 dark:text-slate-100">SAR {calculationResult.terminationCompensation.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                        )}
+                        
+                        {calculationResult.loanDeduction && calculationResult.loanDeduction > 0 && (
+                             <div className="flex justify-between items-center text-red-600 dark:text-red-400">
+                                <span className="font-medium">Outstanding Loan Deduction:</span>
+                                <span className="font-bold">(- SAR {calculationResult.loanDeduction.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})</span>
                             </div>
                         )}
                         
@@ -109,8 +134,12 @@ export const EOSBCalculator: React.FC<{ employees: Employee[] }> = ({ employees 
 
                         <div className="flex justify-between items-center text-2xl">
                             <span className="font-bold text-slate-600 dark:text-slate-300">Total Settlement Amount:</span>
-                            <span className="font-extrabold text-blue-600 dark:text-blue-400">
-                                SAR {(calculationResult.totalGratuity + (calculationResult.terminationCompensation || 0)).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            <span className="font-extrabold text-primary-600 dark:text-primary-400">
+                                SAR {(
+                                    calculationResult.totalGratuity + 
+                                    (calculationResult.terminationCompensation || 0) -
+                                    (calculationResult.loanDeduction || 0)
+                                ).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                             </span>
                         </div>
                         <div className="text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-900/50 p-3 rounded-md">

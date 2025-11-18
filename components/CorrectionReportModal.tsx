@@ -21,7 +21,7 @@ export const CorrectionReportModal: React.FC<CorrectionReportModalProps> = ({ re
       >
         <div className="sticky top-0 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700 px-6 py-4 flex justify-between items-center">
           <h2 id="report-title" className="text-xl font-bold text-slate-900 dark:text-slate-100">
-            AI Data Correction Report
+            Data Processing Report
           </h2>
           <button 
             onClick={onClose} 
@@ -79,7 +79,7 @@ export const CorrectionReportModal: React.FC<CorrectionReportModalProps> = ({ re
           )}
         </div>
         <div className="px-6 py-3 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-700 text-right">
-            <button onClick={onClose} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700">
+            <button onClick={onClose} className="px-4 py-2 bg-primary-600 text-white font-semibold rounded-md hover:bg-primary-700">
                 Close
             </button>
         </div>

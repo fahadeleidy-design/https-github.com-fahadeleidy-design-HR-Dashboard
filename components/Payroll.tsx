@@ -14,6 +14,7 @@ export const Payroll: React.FC<{ employees: Employee[] }> = ({ employees }) => {
   const [overtimeRule, setOvertimeRule] = useState<RuleDefinition | null>(null);
   const [selectedEmployeeForPayslip, setSelectedEmployeeForPayslip] = useState<[Employee, PayrollRecord] | null>(null);
   const [showArabicNames, setShowArabicNames] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
     const rules = loadRules();
@@ -95,16 +96,28 @@ export const Payroll: React.FC<{ employees: Employee[] }> = ({ employees }) => {
     });
   };
 
+  const filteredRecords = useMemo(() => {
+    if (!payrollRun) return [];
+    if (!searchTerm) return payrollRun.records;
+    
+    const lowercasedFilter = searchTerm.toLowerCase();
+    return payrollRun.records.filter(rec =>
+      rec.employeeName.toLowerCase().includes(lowercasedFilter) ||
+      rec.employeeId.toLowerCase().includes(lowercasedFilter)
+    );
+  }, [payrollRun, searchTerm]);
+
+
   const totals = useMemo(() => {
     if (!payrollRun) return null;
-    return payrollRun.records.reduce((acc, rec) => ({
+    return filteredRecords.reduce((acc, rec) => ({
       gross: acc.gross + rec.grossEarnings,
       gosi: acc.gosi + rec.gosiDeductionEmployee,
       loan: acc.loan + rec.personalLoanDeduction,
       deductions: acc.deductions + rec.totalDeductions,
       net: acc.net + rec.netPay,
     }), { gross: 0, gosi: 0, loan: 0, deductions: 0, net: 0 });
-  }, [payrollRun]);
+  }, [filteredRecords, payrollRun]);
 
   const exportToCsv = () => {
     if (!payrollRun) return;
@@ -161,6 +174,20 @@ export const Payroll: React.FC<{ employees: Employee[] }> = ({ employees }) => {
 
       {payrollRun ? (
         <>
+        <div className="relative mb-4">
+            <input
+                type="text"
+                placeholder="Search by name or ID..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full p-2 pl-10 border bg-transparent border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-primary-500 transition"
+            />
+            <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+            </div>
+        </div>
         <div className="overflow-x-auto">
           <table className="w-full text-sm text-left text-slate-500 dark:text-slate-400">
             <thead className="text-xs text-slate-700 dark:text-slate-300 uppercase bg-slate-100 dark:bg-slate-700">
@@ -176,7 +203,7 @@ export const Payroll: React.FC<{ employees: Employee[] }> = ({ employees }) => {
               </tr>
             </thead>
             <tbody>
-              {payrollRun.records.map(rec => {
+              {filteredRecords.map(rec => {
                 const emp = employees.find(e => e.employeeId === rec.employeeId);
                 const isRtl = showArabicNames && /[\u0600-\u06FF]/.test(rec.employeeName);
                 return (

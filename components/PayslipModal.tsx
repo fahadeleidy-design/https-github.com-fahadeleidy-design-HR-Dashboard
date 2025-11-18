@@ -82,7 +82,7 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ employee, record, ru
         [{ content: 'Gross Earnings', styles: { fontStyle: 'bold' } }, nf.format(record.grossEarnings), { content: 'Total Deductions', styles: { fontStyle: 'bold' } }, nf.format(record.totalDeductions)]
       ],
       theme: 'striped',
-      headStyles: { fillColor: [41, 128, 185] },
+      headStyles: { fillColor: '#ea580c' }, // Primary color
       footStyles: { fillColor: [236, 240, 241], textColor: [44, 62, 80] },
       columnStyles: { 1: { halign: 'right' }, 3: { halign: 'right' } },
     });
@@ -143,14 +143,14 @@ export const PayslipModal: React.FC<PayslipModalProps> = ({ employee, record, ru
                     </div>
                 </div>
             </div>
-             <div className="mt-6 bg-blue-50 dark:bg-blue-900/30 p-4 rounded-lg flex justify-between items-center">
-                <h3 className="text-lg font-extrabold text-blue-800 dark:text-blue-200">Net Pay</h3>
-                <p className="text-2xl font-extrabold text-blue-800 dark:text-blue-200">SAR {nf.format(record.netPay)}</p>
+             <div className="mt-6 bg-primary-50 dark:bg-primary-900/30 p-4 rounded-lg flex justify-between items-center">
+                <h3 className="text-lg font-extrabold text-primary-800 dark:text-primary-200">Net Pay</h3>
+                <p className="text-2xl font-extrabold text-primary-800 dark:text-primary-200">SAR {nf.format(record.netPay)}</p>
             </div>
         </main>
         <footer className="px-6 py-3 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-3">
              <button onClick={onClose} className="px-4 py-2 bg-slate-200 dark:bg-slate-600 text-slate-800 dark:text-slate-100 font-semibold rounded-md hover:bg-slate-300 dark:hover:bg-slate-500">Close</button>
-             <button onClick={handleDownloadPdf} className="px-4 py-2 bg-blue-600 text-white font-semibold rounded-md hover:bg-blue-700 flex items-center gap-2">
+             <button onClick={handleDownloadPdf} className="px-4 py-2 bg-primary-600 text-white font-semibold rounded-md hover:bg-primary-700 flex items-center gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                 Download PDF
             </button>

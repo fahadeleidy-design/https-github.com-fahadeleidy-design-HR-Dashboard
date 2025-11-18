@@ -35,8 +35,16 @@ export const calculateGOSI = (employee: Employee, rule: RuleDefinition): { emplo
     };
 };
 
-export const calculateNitaqatStatus = (saudiCount: number, totalCount: number, sector: string, rule: RuleDefinition, lang: 'en' | 'ar'): NitaqatInfo => {
-    const rate = totalCount > 0 ? (saudiCount / totalCount) * 100 : 0;
+// FIX: Update function signature to accept an employee array instead of counts to fix type mismatch.
+export const calculateNitaqatStatus = (employees: (Employee | Partial<Employee>)[], rule: RuleDefinition, sector: string, lang: 'en' | 'ar'): NitaqatInfo => {
+    const totalCount = employees.length;
+    const rawSaudiCount = employees.filter(e => e.isSaudi).length;
+    
+    // In a real system, effectiveSaudiCount would be calculated based on special rules (e.g. weighting).
+    // For this simulation, we'll assume the effective count is the same as the raw count.
+    const effectiveSaudiCount = rawSaudiCount;
+
+    const rate = totalCount > 0 ? (effectiveSaudiCount / totalCount) * 100 : 0;
     
     const validSectors = Object.keys(rule.parameters.sectorAdjustments);
     const selectedSectorKey = validSectors.includes(sector) ? sector : validSectors[0];
@@ -61,9 +69,9 @@ export const calculateNitaqatStatus = (saudiCount: number, totalCount: number, s
         nextLevel = {...next, threshold: nextThresholdValue};
     }
 
-    const progress = nextLevel 
+    const progress = nextLevel && nextLevel.threshold > currentLevel.threshold
         ? Math.max(0, Math.min(100, ((rate - currentLevel.threshold) / (nextLevel.threshold - currentLevel.threshold)) * 100))
-        : 100;
+        : (rate >= currentLevel.threshold ? 100 : 0);
 
     const getName = (level: any) => lang === 'ar' ? level.nameAr : level.name;
 
@@ -75,6 +83,8 @@ export const calculateNitaqatStatus = (saudiCount: number, totalCount: number, s
         nextStatus: nextLevel ? getName(nextLevel) : undefined,
         nextThreshold: nextLevel?.threshold,
         progressToNext: isNaN(progress) ? 0 : progress,
+        rawSaudiCount: rawSaudiCount,
+        effectiveSaudiCount: effectiveSaudiCount,
     };
 };
 
@@ -83,7 +93,8 @@ export const calculateEOSB = (
     employee: Employee, 
     rule: RuleDefinition, 
     reason: TerminationReason, 
-    salary: number
+    salary: number,
+    terminationCompensationMonths: number
 ): EOSBResult | null => {
     if (!employee.dateOfJoining || salary <= 0) return null;
 
@@ -95,6 +106,7 @@ export const calculateEOSB = (
     const breakdown: string[] = [];
     let gratuity = 0;
     let terminationCompensation = 0;
+    let loanDeduction = 0;
 
     // Step 1: Calculate base gratuity
     const termParams = params.termination;
@@ -136,27 +148,43 @@ export const calculateEOSB = (
     } else if (reason === 'termination') {
         breakdown.push("Reason: Contract Termination by Employer. Full gratuity is awarded.");
         
-        if (employee.contract.contractType === 'fixed' && employee.contract.endDate) {
-            const remainingTime = new Date(employee.contract.endDate).getTime() - today.getTime();
-            if (remainingTime > 0) {
-                const remainingMonths = remainingTime / (1000 * 60 * 60 * 24 * 30.44); // Average days in month
-                terminationCompensation = remainingMonths * salary;
-                breakdown.push(`+ Compensation for remaining contract period (${remainingMonths.toFixed(2)} months) = SAR ${terminationCompensation.toFixed(2)}`);
-            }
-        } else if (employee.contract.contractType === 'indefinite') {
-            const noticeMonths = params.termination.indefiniteContractNoticeMonths || 2;
-            terminationCompensation = noticeMonths * salary;
-            breakdown.push(`+ Compensation for notice period (${noticeMonths} months) = SAR ${terminationCompensation.toFixed(2)}`);
+        if (terminationCompensationMonths > 0) {
+            terminationCompensation = terminationCompensationMonths * salary;
+            breakdown.push(`+ Additional Compensation (${terminationCompensationMonths} months) = SAR ${terminationCompensation.toFixed(2)}`);
         }
 
     } else if (reason === 'non-renewal') {
         breakdown.push("Reason: Contract Completion / Non-Renewal. Full gratuity is awarded.");
     }
     
+    // Step 3: Calculate outstanding loan
+    const loanInfo = employee.payroll.loanInfo;
+    if (loanInfo && loanInfo.totalAmount && loanInfo.startDate) {
+        const loanStartDate = new Date(loanInfo.startDate);
+        const installments = loanInfo.installments || 4;
+        const monthlyInstallment = loanInfo.totalAmount / installments;
+
+        if (today > loanStartDate) {
+            let monthsPassed = (today.getFullYear() - loanStartDate.getFullYear()) * 12;
+            monthsPassed -= loanStartDate.getMonth();
+            monthsPassed += today.getMonth();
+            
+            const paidInstallments = Math.max(0, Math.min(monthsPassed, installments));
+            const totalPaid = paidInstallments * monthlyInstallment;
+            const outstandingLoan = loanInfo.totalAmount - totalPaid;
+
+            if (outstandingLoan > 0.01) { // Use a small threshold for floating point inaccuracies
+                loanDeduction = outstandingLoan;
+                breakdown.push(`- Outstanding Loan Deduction: SAR ${loanDeduction.toFixed(2)} (${installments - paidInstallments} of ${installments} installments remaining).`);
+            }
+        }
+    }
+
     return {
         yearsOfService,
         totalGratuity: gratuity,
-        terminationCompensation: terminationCompensation,
+        terminationCompensation,
+        loanDeduction,
         calculationBreakdown: breakdown,
     };
 };

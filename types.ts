@@ -77,11 +77,12 @@ export interface Employee {
   iban?: string;
   bankName?: string;
   specialCategory?: 'normal' | 'disabled' | 'exConvict' | 'partTime' | 'student' | 'remote' | 'specialNonSaudi' | 'gulfNational' | string;
+  isDriver?: boolean;
   createdAt?: string;
   updatedAt?: string;
 }
 
-export type Tab = 'dashboard' | 'directory' | 'saudization' | 'payroll' | 'eosb' | 'leave' | 'reports' | 'ask-ai' | 'loans';
+export type Tab = 'dashboard' | 'directory' | 'saudization' | 'payroll' | 'eosb' | 'leave' | 'reports' | 'ask-ai' | 'loans' | 'vehicles' | 'gov-docs';
 
 // Type for chart data points
 export interface ChartDataPoint {
@@ -118,6 +119,7 @@ export interface EOSBResult {
     yearsOfService: number;
     totalGratuity: number;
     terminationCompensation?: number;
+    loanDeduction?: number;
     calculationBreakdown: string[];
 }
 
@@ -158,4 +160,102 @@ export interface PayrollRun {
     year: number;
     records: PayrollRecord[];
     runDate: Date;
+}
+
+// Types for Vehicle Management
+export interface VehicleDocument {
+    startDate: Date | null;
+    endDate: Date | null;
+}
+
+export interface Vehicle {
+    id: string; // Plate number
+    plateNumber: string;
+    make: string;
+    model: string;
+    year: number;
+    driverId?: string; // Employee ID of the driver
+    insurance: VehicleDocument;
+    inspection: VehicleDocument; // Fahas
+    registration: VehicleDocument; // Istamara
+}
+
+export type Driver = Employee;
+
+// Types for Governmental Documents
+export interface GovernmentalDocument {
+  id: string;
+  documentType: string;
+  documentName: string;
+  documentNumber: string;
+  issuingAuthority: string;
+  issueDate: Date | null;
+  expiryDate: Date | null;
+  costToRenew: number;
+  renewalFrequency: string;
+  notes?: string;
+}
+
+
+// Prop Types for Components
+export interface EmployeeTableProps {
+  employees: Employee[];
+  onUpdateEmployee: (employee: Employee) => void;
+  onAddEmployee: (employee: Omit<Employee, 'id' | 'createdAt' | 'updatedAt'>) => void;
+  onDeleteEmployee: (employeeId: string) => void;
+  initialFilter?: { type: string } | null;
+  onFilterApplied: () => void;
+}
+
+export interface EmployeeDetailModalProps {
+    employee: Employee;
+    onClose: () => void;
+    onUpdateEmployee: (employee: Employee) => void;
+    onDeleteEmployee: (employeeId: string) => void;
+}
+
+export interface AddEmployeeModalProps {
+    onClose: () => void;
+    onAddEmployee: (employee: Omit<Employee, 'id' | 'createdAt' | 'updatedAt'>) => void;
+}
+
+export interface VehicleManagementProps {
+    vehicles: Vehicle[];
+    drivers: Driver[];
+    onAddVehicle: (vehicle: Omit<Vehicle, 'id'>) => void;
+    onUpdateVehicle: (vehicle: Vehicle) => void;
+    onDeleteVehicle: (vehicleId: string) => void;
+}
+
+export interface VehicleDetailModalProps {
+    vehicle: Vehicle;
+    drivers: Driver[];
+    onClose: () => void;
+    onUpdateVehicle: (vehicle: Vehicle) => void;
+    onDeleteVehicle: (vehicleId: string) => void;
+}
+
+export interface AddVehicleModalProps {
+    drivers: Driver[];
+    onClose: () => void;
+    onAddVehicle: (vehicle: Omit<Vehicle, 'id'>) => void;
+}
+
+export interface GovDocsManagementProps {
+    govDocs: GovernmentalDocument[];
+    onAddGovDoc: (doc: Omit<GovernmentalDocument, 'id'>) => void;
+    onUpdateGovDoc: (doc: GovernmentalDocument) => void;
+    onDeleteGovDoc: (docId: string) => void;
+}
+
+export interface GovDocDetailModalProps {
+    doc: GovernmentalDocument;
+    onClose: () => void;
+    onUpdateGovDoc: (doc: GovernmentalDocument) => void;
+    onDeleteGovDoc: (docId: string) => void;
+}
+
+export interface AddGovDocModalProps {
+    onClose: () => void;
+    onAddGovDoc: (doc: Omit<GovernmentalDocument, 'id'>) => void;
 }
