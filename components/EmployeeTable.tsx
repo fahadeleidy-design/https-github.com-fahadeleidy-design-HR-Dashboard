@@ -1,12 +1,22 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { Employee } from '../types';
+import { EmployeeDetailModal } from './EmployeeDetailModal';
 
 interface EmployeeTableProps {
   employees: Employee[];
+  onUpdateEmployee: (employee: Employee) => void;
+  initialFilter?: { type: string } | null;
+  onFilterApplied: () => void;
 }
 
-type SortKey = keyof Employee;
+type SortKey = keyof Employee | 'iqamaExpiryDate' | 'contractEndDate' | 'contractType';
 type SortOrder = 'asc' | 'desc';
+const ITEMS_PER_PAGE = 15;
+
+const formatDate = (date: Date | null): string => {
+    if (!date) return 'N/A';
+    return new Date(date).toLocaleDateString('en-CA');
+};
 
 const daysUntil = (date: Date | null): number => {
     if (!date) return Infinity;
@@ -18,226 +28,348 @@ const daysUntil = (date: Date | null): number => {
     return Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 };
 
-const formatDate = (date: Date | null) => {
-    if (!date) return 'N/A';
-    return new Date(date).toLocaleDateString('en-CA');
-};
-
-const getDateUrgencyClass = (date: Date | null, options?: { contractType?: string }): string => {
-    // If contractType is provided, only apply highlighting for non-indefinite contracts.
-    if (options?.contractType && String(options.contractType).toLowerCase().includes('indefinite')) {
-        return '';
-    }
+const getDateUrgencyClass = (date: Date | null, isIndefiniteContract: boolean): string => {
+    if (isIndefiniteContract) return '';
     const days = daysUntil(date);
-    if (days < 0) return 'bg-red-100 text-red-800 font-semibold';
-    if (days <= 30) return 'bg-red-100 text-red-700 font-medium';
-    if (days <= 90) return 'bg-yellow-100 text-yellow-700 font-medium';
-    return '';
+    if (days < 0) return 'bg-red-200 dark:bg-red-900/50 text-red-800 dark:text-red-300 font-semibold';
+    if (days <= 30) return 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 font-medium';
+    if (days <= 90) return 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 font-medium';
+    return 'dark:text-slate-300';
 };
 
-export const EmployeeTable: React.FC<EmployeeTableProps> = ({ employees }) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [selectedSponsor, setSelectedSponsor] = useState('');
-  const [sortConfig, setSortConfig] = useState<{ key: SortKey; order: SortOrder } | null>({ key: 'employeeNameEnglish', order: 'asc'});
+const DateRangePicker: React.FC<{
+  label: string;
+  range: { from: string; to: string };
+  setRange: React.Dispatch<React.SetStateAction<{ from: string; to: string }>>;
+  onFilterChange: () => void;
+}> = ({ label, range, setRange, onFilterChange }) => {
+  const handleFromChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setRange(prev => ({ ...prev, from: e.target.value }));
+    onFilterChange();
+  };
+  const handleToChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setRange(prev => ({ ...prev, to: e.target.value }));
+    onFilterChange();
+  };
+  const clearRange = () => {
+    if (range.from || range.to) {
+      setRange({ from: '', to: '' });
+      onFilterChange();
+    }
+  };
 
-    const headers: { key: SortKey; label: string }[] = [
+  return (
+    <div>
+      <label className="block text-sm font-medium text-slate-600 dark:text-slate-300 mb-1">{label}</label>
+      <div className="flex items-center gap-1">
+        <input type="date" value={range.from} onChange={handleFromChange} className="p-2 border bg-transparent border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-blue-500 transition w-full text-sm" />
+        <span className="text-slate-500 dark:text-slate-400">-</span>
+        <input type="date" value={range.to} onChange={handleToChange} className="p-2 border bg-transparent border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-blue-500 transition w-full text-sm" />
+        <button onClick={clearRange} className="p-2 text-slate-500 hover:text-slate-700 dark:text-slate-300 rounded-md disabled:opacity-50 disabled:cursor-not-allowed" aria-label={`Clear ${label} filter`} disabled={!range.from && !range.to}>
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+    </div>
+  );
+};
+
+export const EmployeeTable: React.FC<EmployeeTableProps> = ({ employees, onUpdateEmployee, initialFilter, onFilterApplied }) => {
+  const [searchTerm, setSearchTerm] = useState('');
+  const [sortConfig, setSortConfig] = useState<{ key: SortKey; order: SortOrder }>({ key: 'employeeNameEnglish', order: 'asc'});
+  const [selectedEmployee, setSelectedEmployee] = useState<Employee | null>(null);
+  const [departmentFilter, setDepartmentFilter] = useState('');
+  const [nationalityFilter, setNationalityFilter] = useState('');
+  const [contractTypeFilter, setContractTypeFilter] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [joiningDateRange, setJoiningDateRange] = useState<{ from: string; to: string }>({ from: '', to: '' });
+  const [iqamaExpiryRange, setIqamaExpiryRange] = useState<{ from: string; to: string }>({ from: '', to: '' });
+  const [contractEndRange, setContractEndRange] = useState<{ from: string; to: string }>({ from: '', to: '' });
+  
+  const resetAllFilters = (excludeInitial: boolean = false) => {
+    setSearchTerm('');
+    setDepartmentFilter('');
+    setNationalityFilter('');
+    setContractTypeFilter('');
+    setJoiningDateRange({ from: '', to: '' });
+    setIqamaExpiryRange({ from: '', to: '' });
+    setContractEndRange({ from: '', to: '' });
+    setCurrentPage(1);
+  };
+
+  useEffect(() => {
+    if (initialFilter) {
+      resetAllFilters(true);
+      const today = new Date();
+      switch(initialFilter.type) {
+        case 'SAUDI_NATIONALS':
+          // Find the exact nationality string for Saudis to set the filter correctly
+          const saudiNationality = uniqueNationalities.find(n => n.toLowerCase().includes('saudi') || n.toLowerCase().includes('سعودي'));
+          if (saudiNationality) {
+            setNationalityFilter(saudiNationality);
+          }
+          break;
+        case 'EXPAT_NATIONALS':
+          // This is more complex, might need an "isSaudi" filter flag later.
+          // For now, we can't set this with a single nationality.
+          break;
+        case 'IQAMA_EXPIRY_THIS_MONTH':
+          const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+          const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+          setIqamaExpiryRange({ from: formatDate(startOfMonth), to: formatDate(endOfMonth) });
+          break;
+        case 'IQAMA_EXPIRY_NEXT_MONTH':
+          const startOfNextMonth = new Date(today.getFullYear(), today.getMonth() + 1, 1);
+          const endOfNextMonth = new Date(today.getFullYear(), today.getMonth() + 2, 0);
+          setIqamaExpiryRange({ from: formatDate(startOfNextMonth), to: formatDate(endOfNextMonth) });
+          break;
+        case 'CONTRACT_EXPIRY_60_70_DAYS':
+          const dateIn60Days = new Date();
+          dateIn60Days.setDate(today.getDate() + 60);
+          const dateIn70Days = new Date();
+          dateIn70Days.setDate(today.getDate() + 70);
+          setContractEndRange({ from: formatDate(dateIn60Days), to: formatDate(dateIn70Days) });
+          break;
+      }
+      onFilterApplied();
+    }
+  }, [initialFilter, onFilterApplied]);
+
+
+  const headers: { key: SortKey; label: string }[] = [
     { key: 'employeeId', label: 'ID' },
     { key: 'employeeNameEnglish', label: 'Full Name' },
     { key: 'employeeNameArabic', label: 'Name (Arabic)' },
     { key: 'department', label: 'Department' },
-    { key: 'status', label: 'Status' },
-    { key: 'contractType', label: 'Contract Type' },
+    { key: 'contractType', label: 'Contract' },
     { key: 'iqamaExpiryDate', label: 'Iqama Expiry' },
-    { key: 'passportExpiryDate', label: 'Passport Expiry' },
     { key: 'contractEndDate', label: 'Contract End' },
   ];
   
-  const sponsors = useMemo(() => {
-    const uniqueSponsors = [...new Set(employees.map(e => e.sponsorName).filter(Boolean))];
-    return uniqueSponsors.sort();
+  const { uniqueDepartments, uniqueContractTypes, uniqueNationalities } = useMemo(() => {
+    const departments = [...new Set(employees.map(e => e.department))].sort();
+    const contractTypes = [...new Set(employees.map(e => e.contract.contractType))].sort();
+    const nationalities = [...new Set(employees.map(e => e.nationality))].sort();
+    return { uniqueDepartments: departments, uniqueContractTypes: contractTypes, uniqueNationalities: nationalities };
   }, [employees]);
 
-  const sortedEmployees = useMemo(() => {
-    let sortableItems = [...employees];
-    if (sortConfig !== null) {
+  const filteredAndSortedEmployees = useMemo(() => {
+    const checkDateRange = (date: Date | null, range: { from: string; to: string }) => {
+      if (!range.from && !range.to) return true;
+      if (!date) return false;
+      const itemDate = new Date(date);
+      itemDate.setHours(0, 0, 0, 0);
+
+      if (range.from) {
+        const fromDate = new Date(`${range.from}T00:00:00`);
+        if (itemDate < fromDate) return false;
+      }
+      if (range.to) {
+        const toDate = new Date(`${range.to}T00:00:00`);
+        if (itemDate > toDate) return false;
+      }
+      return true;
+    };
+
+    let sortableItems = employees
+      .filter(e => {
+        const departmentMatch = !departmentFilter || e.department === departmentFilter;
+        const contractTypeMatch = !contractTypeFilter || e.contract.contractType === contractTypeFilter;
+        const nationalityMatch = !nationalityFilter || e.nationality === nationalityFilter;
+        const searchMatch = !searchTerm || Object.values(e).some(value => 
+            typeof value === 'object' && value !== null
+            ? Object.values(value).some(subVal => String(subVal).toLowerCase().includes(searchTerm.toLowerCase()))
+            : String(value).toLowerCase().includes(searchTerm.toLowerCase())
+        );
+
+        const joiningDateMatch = checkDateRange(e.dateOfJoining, joiningDateRange);
+        const iqamaExpiryMatch = checkDateRange(e.visa.iqamaExpiryDate, iqamaExpiryRange);
+        const contractEndMatch = checkDateRange(e.contract.endDate, contractEndRange);
+
+        return departmentMatch && contractTypeMatch && nationalityMatch && searchMatch && joiningDateMatch && iqamaExpiryMatch && contractEndMatch;
+      });
+
+    if (sortConfig.key) {
       sortableItems.sort((a, b) => {
-        const valA = a[sortConfig.key];
-        const valB = b[sortConfig.key];
+        const getVal = (emp: Employee, key: SortKey) => {
+            switch(key) {
+                case 'iqamaExpiryDate': return emp.visa.iqamaExpiryDate;
+                case 'contractEndDate': return emp.contract.endDate;
+                case 'contractType': return emp.contract.contractType;
+                default: return emp[key as keyof Employee];
+            }
+        }
+        const valA = getVal(a, sortConfig.key);
+        const valB = getVal(b, sortConfig.key);
         if (valA === null || valA === undefined) return 1;
         if (valB === null || valB === undefined) return -1;
         
-        // Handle date sorting explicitly
-        if (['iqamaExpiryDate', 'passportExpiryDate', 'contractEndDate', 'dateOfJoining'].includes(sortConfig.key)) {
-            const dateA = new Date(valA as any).getTime();
-            const dateB = new Date(valB as any).getTime();
-            if (dateA < dateB) return sortConfig.order === 'asc' ? -1 : 1;
-            if (dateA > dateB) return sortConfig.order === 'asc' ? 1 : -1;
-            return 0;
+        let comparison = 0;
+        if (valA instanceof Date && valB instanceof Date) {
+            comparison = valA.getTime() - valB.getTime();
+        } else {
+            comparison = String(valA).toLowerCase().localeCompare(String(valB).toLowerCase());
         }
-
-        if (valA < valB) return sortConfig.order === 'asc' ? -1 : 1;
-        if (valA > valB) return sortConfig.order === 'asc' ? 1 : -1;
-        return 0;
+        return sortConfig.order === 'asc' ? comparison : -comparison;
       });
     }
     return sortableItems;
-  }, [employees, sortConfig]);
-  
-  const filteredEmployees = useMemo(() => {
-    return sortedEmployees.filter(employee => {
-        const matchesSponsor = !selectedSponsor || employee.sponsorName === selectedSponsor;
-        const matchesSearch = Object.values(employee).some(value =>
-            String(value).toLowerCase().includes(searchTerm.toLowerCase())
-        );
-        return matchesSponsor && matchesSearch;
-    });
-  }, [sortedEmployees, searchTerm, selectedSponsor]);
+  }, [employees, sortConfig, searchTerm, departmentFilter, contractTypeFilter, nationalityFilter, joiningDateRange, iqamaExpiryRange, contractEndRange]);
+
+  const paginatedEmployees = useMemo(() => {
+    const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+    return filteredAndSortedEmployees.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+  }, [filteredAndSortedEmployees, currentPage]);
+
+  const totalPages = Math.ceil(filteredAndSortedEmployees.length / ITEMS_PER_PAGE);
 
   const requestSort = (key: SortKey) => {
-    let order: SortOrder = 'asc';
-    if (sortConfig && sortConfig.key === key && sortConfig.order === 'asc') {
-      order = 'desc';
-    }
+    const order = (sortConfig.key === key && sortConfig.order === 'asc') ? 'desc' : 'asc';
     setSortConfig({ key, order });
   };
   
-  const getSortIndicator = (key: SortKey) => {
-    if (!sortConfig || sortConfig.key !== key) return null;
-    return sortConfig.order === 'asc' ? '▲' : '▼';
+  const handleFilterChange = () => {
+    setCurrentPage(1);
   };
-
-  const handleExportCSV = () => {
-    if (filteredEmployees.length === 0) {
-      alert("No data to export.");
-      return;
-    }
-
-    const escapeCSV = (value: any) => {
-      if (value === null || value === undefined) return '';
-      if (value instanceof Date) return formatDate(value);
-      
-      const stringValue = String(value);
-      if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
-        return `"${stringValue.replace(/"/g, '""')}"`;
-      }
-      return stringValue;
-    };
+  
+  const exportToCsv = () => {
+    const filename = `employee_data_${new Date().toISOString().split('T')[0]}.csv`;
     
-    const csvHeaders = headers.map(h => h.label).join(',');
-    const csvRows = filteredEmployees.map(emp => {
-      return headers.map(header => escapeCSV(emp[header.key])).join(',');
-    });
+    // Flatten the data for CSV export
+    const flattenedData = filteredAndSortedEmployees.map(e => ({
+        'Employee ID': e.employeeId,
+        'Name (English)': e.employeeNameEnglish,
+        'Name (Arabic)': e.employeeNameArabic,
+        'Nationality': e.nationality,
+        'Department': e.department,
+        'Job Title': e.jobTitle,
+        'Status': e.status,
+        'Date of Joining': formatDate(e.dateOfJoining),
+        'Sponsor': e.sponsorName,
+        'Contract Type': e.contract.contractType,
+        'Contract Start': formatDate(e.contract.startDate),
+        'Contract End': formatDate(e.contract.endDate),
+        'Iqama Number': e.visa.iqamaNumber,
+        'Iqama Expiry': formatDate(e.visa.iqamaExpiryDate),
+        'Passport Number': e.passportNumber,
+        'GOSI Number': e.gosi.gosiNumber,
+        'Basic Salary': e.payroll.basicSalary
+    }));
+    
+    if (flattenedData.length === 0) return;
+    
+    const headers = Object.keys(flattenedData[0]);
+    const escapeCsv = (val: any) => `"${String(val ?? '').replace(/"/g, '""')}"`;
+    
+    const csvRows = [
+        headers.join(','), 
+        ...flattenedData.map(row => 
+            headers.map(header => escapeCsv((row as any)[header])).join(',')
+        )
+    ];
 
-    const csvContent = [csvHeaders, ...csvRows].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-
-    if (link.download !== undefined) {
-      const url = URL.createObjectURL(blob);
-      const today = new Date().toISOString().split('T')[0];
-      link.setAttribute('href', url);
-      link.setAttribute('download', `employee_data_${today}.csv`);
-      link.style.visibility = 'hidden';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    }
+    const bom = new Uint8Array([0xEF, 0xBB, 0xBF]); // BOM for UTF-8
+    const blob = new Blob([bom, csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    link.setAttribute("href", URL.createObjectURL(blob));
+    link.setAttribute("download", filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
-
 
   return (
-    <div className="bg-white p-6 rounded-xl shadow-md border border-slate-200">
-      <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-4 mb-4">
-        <h2 className="text-xl font-bold text-slate-800">Employee Directory</h2>
-        <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-             <div className="flex justify-start sm:justify-end items-center gap-3 text-xs text-slate-500">
-                <span className="font-semibold">Legend:</span>
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-red-100 border border-red-300"></span> Critical (&le;30d)</span>
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-yellow-100 border border-yellow-400"></span> Warning (&le;90d)</span>
-            </div>
-            <div className="flex items-center gap-2">
-                <select
-                    value={selectedSponsor}
-                    onChange={(e) => setSelectedSponsor(e.target.value)}
-                    className="p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition w-full sm:w-auto"
-                >
-                    <option value="">All Sponsors</option>
-                    {sponsors.map(sponsor => (
-                        <option key={sponsor} value={sponsor}>{sponsor}</option>
-                    ))}
+    <>
+    <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-700">
+      <div className="flex flex-col gap-4 mb-4">
+        <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+            <h2 className="text-xl font-bold text-slate-800 dark:text-slate-100">Employee Directory</h2>
+            <button onClick={exportToCsv} className="flex items-center justify-center gap-2 bg-slate-600 dark:bg-slate-700 text-white font-bold py-2 px-4 rounded-md hover:bg-slate-700 dark:hover:bg-slate-600 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Export
+            </button>
+        </div>
+        <div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <input type="text" placeholder="Search..." value={searchTerm} className="p-2 border bg-transparent border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-blue-500 transition w-full" onChange={(e) => {setSearchTerm(e.target.value); handleFilterChange();}} />
+                <select value={departmentFilter} onChange={(e) => {setDepartmentFilter(e.target.value); handleFilterChange();}} className="p-2 border bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-blue-500 transition w-full">
+                    <option value="">All Departments</option>
+                    {uniqueDepartments.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
-                <input
-                type="text"
-                placeholder="Search employees..."
-                className="p-2 border border-slate-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition w-full sm:w-auto"
-                onChange={(e) => setSearchTerm(e.target.value)}
+                 <select value={nationalityFilter} onChange={(e) => {setNationalityFilter(e.target.value); handleFilterChange();}} className="p-2 border bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-blue-500 transition w-full">
+                    <option value="">All Nationalities</option>
+                    {uniqueNationalities.map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+                <select value={contractTypeFilter} onChange={(e) => {setContractTypeFilter(e.target.value); handleFilterChange();}} className="p-2 border bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 rounded-md focus:ring-2 focus:ring-blue-500 transition w-full">
+                    <option value="">All Contract Types</option>
+                    {uniqueContractTypes.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 mt-4 border-t border-slate-200 dark:border-slate-600">
+                <DateRangePicker 
+                    label="Joining Date"
+                    range={joiningDateRange}
+                    setRange={setJoiningDateRange}
+                    onFilterChange={handleFilterChange}
                 />
-                 <button 
-                    onClick={handleExportCSV}
-                    className="flex items-center gap-2 bg-slate-600 text-white font-bold py-2 px-4 rounded-md hover:bg-slate-700 transition-colors"
-                    aria-label="Export data to CSV"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    Export CSV
-                </button>
+                <DateRangePicker 
+                    label="Iqama Expiry Date"
+                    range={iqamaExpiryRange}
+                    setRange={setIqamaExpiryRange}
+                    onFilterChange={handleFilterChange}
+                />
+                <DateRangePicker 
+                    label="Contract End Date"
+                    range={contractEndRange}
+                    setRange={setContractEndRange}
+                    onFilterChange={handleFilterChange}
+                />
             </div>
         </div>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full text-sm text-left text-slate-500">
-          <thead className="text-xs text-slate-700 uppercase bg-slate-100">
+        <table className="w-full text-sm text-left text-slate-500 dark:text-slate-400">
+          <thead className="text-xs text-slate-700 dark:text-slate-300 uppercase bg-slate-100 dark:bg-slate-700">
             <tr>
               {headers.map(({ key, label }) => (
                 <th key={key} scope="col" className="px-6 py-3 cursor-pointer whitespace-nowrap" onClick={() => requestSort(key)}>
-                  {label} {getSortIndicator(key)}
+                  <div className="flex items-center gap-2">{label} <span className="text-slate-400">{sortConfig.key === key ? (sortConfig.order === 'asc' ? '▲' : '▼') : '↕'}</span></div>
                 </th>
               ))}
             </tr>
           </thead>
           <tbody>
-            {filteredEmployees.map((emp) => (
-              <tr key={emp.employeeId} className="bg-white border-b hover:bg-slate-50">
-                <td className="px-6 py-4 font-medium text-slate-900">{emp.employeeId}</td>
-                <td className="px-6 py-4 font-semibold text-slate-800 whitespace-nowrap">{emp.employeeNameEnglish}</td>
-                <td className="px-6 py-4 font-semibold text-slate-800 whitespace-nowrap text-right" dir="rtl">{emp.employeeNameArabic}</td>
+            {paginatedEmployees.map((emp) => (
+              <tr key={emp.employeeId} className="bg-white dark:bg-slate-800 border-b dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer" onClick={() => setSelectedEmployee(emp)}>
+                <td className="px-6 py-4 font-medium text-slate-900 dark:text-slate-100">{emp.employeeId}</td>
+                <td className="px-6 py-4 font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap">{emp.employeeNameEnglish}</td>
+                <td className="px-6 py-4 font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap text-right" dir="rtl">{emp.employeeNameArabic}</td>
                 <td className="px-6 py-4 whitespace-nowrap">{emp.department}</td>
-                <td className="px-6 py-4">
-                  <span className={`px-2 py-1 text-xs font-medium rounded-full ${String(emp.status).toLowerCase() === 'active' ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-800'}`}>
-                    {emp.status}
-                  </span>
-                </td>
-                <td className="px-6 py-4">
-                  <span className={`px-2 py-1 text-xs font-medium rounded-full whitespace-nowrap ${!String(emp.contractType).toLowerCase().includes('indefinite') ? 'bg-blue-100 text-blue-800' : 'bg-indigo-100 text-indigo-800'}`}>
-                    {emp.contractType}
-                  </span>
-                </td>
-                <td className={`px-6 py-4 ${getDateUrgencyClass(emp.iqamaExpiryDate)}`}>
-                    {formatDate(emp.iqamaExpiryDate)}
-                    {daysUntil(emp.iqamaExpiryDate) < 0 && ' (Expired)'}
-                </td>
-                 <td className={`px-6 py-4 ${getDateUrgencyClass(emp.passportExpiryDate)}`}>
-                    {formatDate(emp.passportExpiryDate)}
-                    {daysUntil(emp.passportExpiryDate) < 0 && ' (Expired)'}
-                </td>
-                 <td className={`px-6 py-4 ${getDateUrgencyClass(emp.contractEndDate, { contractType: emp.contractType })}`}>
-                    {formatDate(emp.contractEndDate)}
-                    {!String(emp.contractType).toLowerCase().includes('indefinite') && daysUntil(emp.contractEndDate) < 0 && ' (Expired)'}
-                </td>
+                <td className="px-6 py-4"><span className={`px-2 py-1 text-xs font-medium rounded-full whitespace-nowrap ${String(emp.contract.contractType).toLowerCase() !== 'indefinite' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900/50 dark:text-blue-300' : 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/50 dark:text-indigo-300'}`}>{emp.contract.contractType}</span></td>
+                <td className={`px-6 py-4 ${getDateUrgencyClass(emp.visa.iqamaExpiryDate, false)}`}>{formatDate(emp.visa.iqamaExpiryDate)}</td>
+                <td className={`px-6 py-4 ${getDateUrgencyClass(emp.contract.endDate, String(emp.contract.contractType).toLowerCase() === 'indefinite')}`}>{formatDate(emp.contract.endDate)}</td>
               </tr>
             ))}
-             {filteredEmployees.length === 0 && (
-                <tr>
-                    <td colSpan={headers.length} className="text-center py-10 text-slate-500">
-                        No employees found matching your filters.
-                    </td>
-                </tr>
+             {paginatedEmployees.length === 0 && (
+                <tr><td colSpan={headers.length} className="text-center py-10 text-slate-500 dark:text-slate-400">No employees found.</td></tr>
             )}
           </tbody>
         </table>
       </div>
+      <div className="flex items-center justify-between pt-4">
+        <span className="text-sm text-slate-500 dark:text-slate-400">
+          Showing {Math.min( (currentPage - 1) * ITEMS_PER_PAGE + 1, filteredAndSortedEmployees.length )}-{Math.min(currentPage * ITEMS_PER_PAGE, filteredAndSortedEmployees.length)} of {filteredAndSortedEmployees.length} records
+        </span>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-3 py-1 border rounded-md bg-white dark:bg-slate-700 dark:border-slate-600 disabled:opacity-50">Prev</button>
+          <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage >= totalPages} className="px-3 py-1 border rounded-md bg-white dark:bg-slate-700 dark:border-slate-600 disabled:opacity-50">Next</button>
+        </div>
+      </div>
     </div>
+    {selectedEmployee && <EmployeeDetailModal employee={selectedEmployee} onClose={() => setSelectedEmployee(null)} onUpdateEmployee={onUpdateEmployee} />}
+    </>
   );
 };

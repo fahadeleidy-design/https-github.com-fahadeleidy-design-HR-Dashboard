@@ -1,7 +1,7 @@
-
-import React from 'react';
+import React, { StrictMode } from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App';
+// FIX: Use a named import for the App component as it is not a default export.
+import { App } from './App';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -10,7 +10,7 @@ if (!rootElement) {
 
 const root = ReactDOM.createRoot(rootElement);
 root.render(
-  <React.StrictMode>
+  <StrictMode>
     <App />
-  </React.StrictMode>
+  </StrictMode>
 );

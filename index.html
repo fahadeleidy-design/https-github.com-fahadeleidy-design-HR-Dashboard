@@ -6,21 +6,57 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Saudi HR Compliance Dashboard</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
-    <script src="https://unpkg.com/recharts/umd/Recharts.min.js"></script>
     
-<script type="importmap">
+    <script>
+      // Tailwind CSS Customization
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              primary: {
+                50: '#fff7ed',
+                100: '#ffedd5',
+                200: '#fed7aa',
+                300: '#fdba74',
+                400: '#fb923c',
+                500: '#f97316', // Orange 500 as a base close to the logo
+                600: '#ea580c', // Orange 600
+                700: '#c2410c',
+                800: '#9a3412',
+                900: '#7c2d12',
+                950: '#431407',
+              },
+            }
+          }
+        }
+      }
+
+      // Apply dark mode from localStorage before page load to prevent flashing
+      if (localStorage.getItem('theme') === 'dark' || (!('theme' in localStorage) && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        document.documentElement.classList.add('dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+      }
+    </script>
+    
+    <link rel="stylesheet" href="/index.css">
+  <script type="importmap">
 {
   "imports": {
-    "react": "https://aistudiocdn.com/react@^18.0.0",
-    "react-dom/": "https://aistudiocdn.com/react-dom@^18.0.0/",
-    "react/": "https://aistudiocdn.com/react@^18.0.0/",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.1"
+    "react": "https://aistudiocdn.com/react@^19.2.0",
+    "react-dom/client": "https://aistudiocdn.com/react-dom@^19.2.0/client",
+    "xlsx": "https://aistudiocdn.com/xlsx@^0.18.5",
+    "@google/genai": "https://aistudiocdn.com/@google/genai@^1.29.1",
+    "recharts": "https://aistudiocdn.com/recharts@^3.4.1",
+    "jspdf": "https://aistudiocdn.com/jspdf@^2.5.1",
+    "jspdf-autotable": "https://aistudiocdn.com/jspdf-autotable@^3.8.2",
+    "react-dom/": "https://aistudiocdn.com/react-dom@^19.2.0/",
+    "react/": "https://aistudiocdn.com/react@^19.2.0/"
   }
 }
 </script>
 </head>
-  <body class="bg-slate-50">
+  <body class="bg-slate-100 dark:bg-slate-900">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>
